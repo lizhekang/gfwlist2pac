@@ -2,92 +2,94 @@
 # -*- coding: utf-8 -*-
 
 ##
-# PAC Generator 0.2.1
-# Description: 自动代理配置(Proxy Auto-config)文件生成器，基于gfwlist，支持自定义规则。
-#              更多信息访问项目页面
-# Author: JinnLynn http://jeeker.net
-# Project Page: http://jeeker.net/projects/genpac/
-# Source: https://github.com/JinnLynn/GenPAC
+# gfwlist2pac 0.0.1
+# Description: 自动代理配置(Proxy Auto-config)文件生成器，基于gfwlist。
+# Author: Vangie DU http://codelife.me
+# Source: https://github.com/vangie/gfwlist2pac
+# Fork From: https://github.com/JinnLynn/GenPAC
+# Original Author: JinnLynn http://jeeker.net
 # License: CC BY 3.0 
 #          http://creativecommons.org/licenses/by/3.0/
 ##
 
 # ********************************************************************** #
 
-VERSION = '0.2.1'
+VERSION = '0.0.1'
 
 defaultConfig = {
-               'gfwUrl'       : 'http://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt',
-               'gfwProxyType' : 2,
-               'gfwProxyHost' : '127.0.0.1',
-               'gfwProxyPort' : 9527,
-               'gfwProxyUsr'  : None,
-               'gfwProxyPwd'  : None,
-               'pacProxyType' : 2,
-               'pacProxyHost' : '127.0.0.1',
-               'pacProxyPort' : 9527,
-               'pacFilename'  : 'AutoProxy.pac',
-               'DebugMode'    : False,
-               'JSVersion'    : True
-                }
+    'gfwUrl'         : 'http://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt',
+    'gfwProxy'       : 'SOCKS5 127.0.0.1:7070',
+    'pacProxy'       : 'DIRECT; SOCKS 127.0.0.1:7070; PROXY 127.0.0.1:8087',
+    'pacFilename'    : 'autoproxy.pac',
+    'debug'          : False
+}
 
-gfwlistContent = ''
-gfwlistModified = ''
-config = {}
 
 import sys, os, base64, re, ConfigParser, time
 
-def parseConfig():
-    global defaultConfig, config
-    cf = ConfigParser.ConfigParser(defaultConfig);
-    cf.read('config.txt')
+def parseConfig(defaultConfig):
+    cfgFile = 'gfwlist2pac.cfg'
+    if not os.path.exists(cfgFile):
+        config = defaultConfig
+    else:
+        cf = ConfigParser.ConfigParser(defaultConfig);
+        cf.read(cfgFile)
+        try:
+            config = {
+                'gfwUrl'         : cf.get('config', 'gfwUrl'),
+                'gfwProxy'       : cf.get('config', 'gfwProxy'),
+                'pacProxy'       : cf.get('config', 'pacProxy'),
+                'pacFilename'    : cf.get('config', 'pacFilename'),
+                'debug'          : cf.get('config', 'debug') in ['true', 'True']
+            }
+        except Exception, e:
+            print e
+    if len(config['gfwProxy']) == 0:
+        config['gfwProxyType'] = 0
+    else:
+        p = re.compile('(PROXY|SOCKS|SOCKS5) (?:(.+):(.+)@)?(.+):(\d+)', re.IGNORECASE)
+        m = p.match(config['gfwProxy'])
+        if m is None:
+            print 'Config -> gfwProxy:%s is error format. format like this "PROXY|SOCKS|SOCKS5 [username:password@]hostname:port"' % config['gfwProxy']
+            sys.exit(1)
+        config['gfwProxyType'] = {
+            'SOCKS'     : 1,
+            'SOCKS4'    : 1,
+            'SOCKS5'    : 2,
+            'PROXY'     : 3,
+            }[m.group(1).upper()]
+        config['gfwProxyUsr'] = m.group(2)
+        config['gfwProxyPwd'] = m.group(3)
+        config['gfwProxyHost'] = m.group(4)
+        config['gfwProxyPort'] = int(m.group(5))
 
-    try:
-        config = {
-                   'gfwUrl'       : cf.get('config', 'gfwUrl'),
-                   'gfwProxyType' : cf.getint('config', 'gfwProxyType'),
-                   'gfwProxyHost' : cf.get('config', 'gfwProxyHost'),
-                   'gfwProxyPort' : cf.getint('config', 'gfwProxyPort'),
-                   'gfwProxyUsr'  : cf.get('config', 'gfwProxyUsr'),
-                   'gfwProxyPwd'  : cf.get('config', 'gfwProxyPwd'),
-                   'pacProxyType' : cf.getint('config', 'pacProxyType'),
-                   'pacProxyHost' : cf.get('config', 'pacProxyHost'),
-                   'pacProxyPort' : cf.getint('config', 'pacProxyPort'),
-                   'pacFilename'  : cf.get('config', 'pacFilename'),
-                   'DebugMode'    : cf.getboolean('config', 'DebugMode'),
-                   'JSVersion'    : cf.getboolean('config', 'JSVersion')
-                    }
-    except Exception, e:
-        print e
+    return config
 
-def printConfigInfo():
+def printConfigInfo(config):
     print "配置信息: "
-    print 'GFWList Proxy: Type: %s, Host: %s, Port: %s , Usr: %s, Pwd: %s' % (config['gfwProxyType'], 
-                                                                              config['gfwProxyHost'], config['gfwProxyPort'], 
+    print 'GFWList Proxy: Type: %s, Host: %s, Port: %s , Usr: %s, Pwd: %s' % (config['gfwProxyType'],
+                                                                              config['gfwProxyHost'], config['gfwProxyPort'],
                                                                               config['gfwProxyUsr'], config['gfwProxyPwd'])
-    print "PAC Proxy String: %s" % generateProxyVar()
+    print "PAC Proxy String: %s" % config['pacProxy']
 
-def fetchGFWList():
-    global gfwlistContent, gfwlistModified
+def fetchGFWList(config):
     import socks, socket, urllib2
     gfwProxyType = config['gfwProxyType']
     if (gfwProxyType == socks.PROXY_TYPE_SOCKS4) or (gfwProxyType == socks.PROXY_TYPE_SOCKS5) or (gfwProxyType == socks.PROXY_TYPE_HTTP):
         socks.setdefaultproxy(gfwProxyType, config['gfwProxyHost'], config['gfwProxyPort'], True, config['gfwProxyUsr'], config['gfwProxyPwd'])
         socket.socket = socks.socksocket
 
-    if config['DebugMode']:
+    if config['debug']:
         httpHandler = urllib2.HTTPHandler(debuglevel=1)
         httpsHandler = urllib2.HTTPSHandler(debuglevel=1)
         opener = urllib2.build_opener(httpHandler, httpsHandler)
         urllib2.install_opener(opener)
 
-    try:
-        response = urllib2.urlopen(config['gfwUrl'])
-        gfwlistModified = response.info().getheader('last-modified')
-        gfwlistContent = response.read()
-    except Exception, e:
-        return False, e
-    return True, None
+    response = urllib2.urlopen(config['gfwUrl'])
+    gfwlistModified = response.info().getheader('last-modified')
+    gfwlistContent = response.read()
+
+    return gfwlistContent, gfwlistModified
 
 def wildcardToRegexp(pattern):
     pattern = re.sub(r"([\\\+\|\{\}\[\]\(\)\^\$\.\#])", r"\\\1", pattern);
@@ -145,30 +147,22 @@ def parseRuleList(ruleList):
                 line += "*"
 
         if isDirect:
-            if isRegexp: 
-                directRegexpList.append(line) 
-            else: 
+            if isRegexp:
+                directRegexpList.append(line)
+            else:
                 directWildcardList.append(line)
         else:
-            if isRegexp: 
-                proxyRegexpList.append(line) 
-            else: 
+            if isRegexp:
+                proxyRegexpList.append(line)
+            else:
                 proxyWildcardList.append(line)
 
-        if config['DebugMode']:
-            with open('tmp/rule.txt', 'a') as f:
+        if config['debug']:
+            with open('debug_rule.txt', 'a') as f:
                 f.write("%s\n\t%s\n\n" % (origin_line, line) )
 
     return directRegexpList, directWildcardList, proxyRegexpList, proxyWildcardList
 
-def generateProxyVar():
-    host = '%s:%d' % (config['pacProxyHost'], config['pacProxyPort']) 
-    if config['pacProxyType'] == 1:
-        return 'SOCKS %s' % host
-    elif config['pacProxyType'] == 3:
-        return 'PROXY %s' % host
-    else:
-        return 'SOCKS5 %s; SOCKS %s' % (host, host)
 
 def convertListToJSArray(lst):
     lst = filter(lambda s: isinstance(s, (str, unicode)) and len(s) > 0, lst)
@@ -177,11 +171,10 @@ def convertListToJSArray(lst):
         array = "\n    '" + array + "'\n    "
     return '[' + array + ']'
 
-def parseGFWListRules():
-    global gfwlistContent
+def parseGFWListRules(gfwlistContent):
     gfwlist = base64.decodestring(gfwlistContent)
-    if config['DebugMode']:
-        with open('tmp/gfwlist.txt', 'w') as f:
+    if config['debug']:
+        with open('debug_gfwlist.txt', 'w') as f:
             f.write(gfwlist)
 
     return parseRuleList(gfwlist)
@@ -192,16 +185,16 @@ def parseUserRules():
     proxyUserRegexpList = []
     proxyUserWildcardList = []
     try:
-        with open('user-rules.txt') as f:
+        with open('gfwlist2pac.rules') as f:
             directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList = parseRuleList(f.read())
     except Exception, e:
         pass
-    
+
     return directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList
 
 def generatePACRuls(userRules, gfwListRules):
-    directRegexpList, directWildcardList, proxyRegexpList, proxyWildcardList = parseGFWListRules()
-    directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList = parseUserRules()
+    directRegexpList, directWildcardList, proxyRegexpList, proxyWildcardList = gfwListRules
+    directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList = userRules
 
     rules = '''
 // user rules
@@ -215,21 +208,21 @@ var directRegexpList   = %s;
 var directWildcardList = %s;
 var proxyRegexpList    = %s;
 var proxyWildcardList  = %s;
-''' % ( convertListToJSArray(directUserRegexpList), 
-        convertListToJSArray(directUserWildcardList), 
-        convertListToJSArray(proxyUserRegexpList), 
+''' % ( convertListToJSArray(directUserRegexpList),
+        convertListToJSArray(directUserWildcardList),
+        convertListToJSArray(proxyUserRegexpList),
         convertListToJSArray(proxyUserWildcardList),
-        convertListToJSArray(directRegexpList), 
-        convertListToJSArray(directWildcardList), 
-        convertListToJSArray(proxyRegexpList), 
+        convertListToJSArray(directRegexpList),
+        convertListToJSArray(directWildcardList),
+        convertListToJSArray(proxyRegexpList),
         convertListToJSArray(proxyWildcardList)
-        )
+    )
     return rules
 
 
-def CreatePacFile(gfwlistRules, userRules):
+def CreatePacFile(userRules, gfwlistRules, config):
     pacContent = '''/**
- * GenPAC %(ver)s http://jeeker.net/projects/genpac/
+ * gfwlist2pac %(ver)s http://codelife.me
  * Generated: %(generated)s
  * GFWList Last-Modified: %(gfwmodified)s
  */
@@ -285,19 +278,16 @@ function FindProxyForURL(url, host) {
     return D;
 }
 '''
-    result = { 'ver':       VERSION,
-               'generated': time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime()),
+    result = { 'ver'        : VERSION,
+               'generated'  : time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime()),
                'gfwmodified': gfwlistModified,
-               'proxy':     generateProxyVar(),
-               'rules':     generatePACRuls(userRules, gfwlistRules)
-              }
+               'proxy'      : config['pacProxy']    ,
+               'rules'      : generatePACRuls(userRules, gfwlistRules)
+    }
     pacContent = pacContent % result
     with open(config['pacFilename'], 'w') as handle:
         handle.write(pacContent)
 
-    if config['JSVersion']:
-        with open('test/genpac.js', 'w') as js:
-            js.write(pacContent)
 
 if __name__ == "__main__":
 
@@ -305,35 +295,31 @@ if __name__ == "__main__":
     os.chdir(sys.path[0])
 
     print '''/** 
- * PAC Generator %s by JinnLynn http://jeeker.net
+ * gfwlist2pac %s by Vangie Du http://codelife.me
  */''' % VERSION
 
-    if not os.path.exists('tmp') or not os.path.isdir('tmp'):
-        os.mkdir('tmp')
-    #os.remove('tmp/*')
-    os.system("rm -rf tmp/*")
+    config = parseConfig(defaultConfig)
 
-    parseConfig()
-
-    printConfigInfo()
+    printConfigInfo(config)
 
     print "正在获取GFWList %s ..." % config['gfwUrl']
-    res, errorInfo = fetchGFWList()
-    if res == False:
-        print "GFWList获取失败，请检查相关内容是否配置正确。"
-        print "错误信息: %s" % errorInfo
-        sys.exit(1)
-    else:
+
+    try:
+        gfwlistContent, gfwlistModified = fetchGFWList(config)
         print "GFWList[Last-Modified: %s]已获取。" % gfwlistModified
         print '正在解析 GFWList Rules ...'
-    
+    except Exception as e:
+        print "GFWList获取失败，请检查相关内容是否配置正确。"
+        print "错误信息: %s" % e.message
+        sys.exit(1)
+
     # 无论gfwlist是否获取成功，都要解析，否则PAC文件有错，只是获取失败时解析的是空数据
-    gfwlistRules = parseGFWListRules()
+    gfwlistRules = parseGFWListRules(gfwlistContent)
 
     print '正在解析 User Rules ...'
     userRules = parseUserRules()
 
     print "正在生成 %s ..." % config['pacFilename']
-    CreatePacFile(userRules, gfwlistRules)
-    
+    CreatePacFile(userRules, gfwlistRules, config)
+
     print "一切就绪。"
