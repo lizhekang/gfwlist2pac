@@ -14,21 +14,29 @@
 
 # ********************************************************************** #
 
+import sys
+import os
+import base64
+import re
+import ConfigParser
+import time
+import argparse
+
+
 VERSION = '0.0.1'
 
 defaultConfig = {
-    'gfwUrl'         : 'http://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt',
-    'gfwProxy'       : 'SOCKS5 127.0.0.1:7070',
-    'pacProxy'       : 'DIRECT; SOCKS 127.0.0.1:7070; PROXY 127.0.0.1:8087',
-    'pacFilename'    : 'autoproxy.pac',
-    'debug'          : False
+    'gfwUrl': 'http://autoproxy-gfwlist.googlecode.com/svn/trunk/gfwlist.txt',
+    'gfwProxy': '',
+    'pacProxy': 'DIRECT; SOCKS 127.0.0.1:7070; PROXY 127.0.0.1:8087',
+    'pacFilename': 'autoproxy.pac',
+    'debug': False
 }
 
+default_config_file = 'gfwlist2pac.cfg'
 
-import sys, os, base64, re, ConfigParser, time
 
-def parseConfig(defaultConfig):
-    cfgFile = 'gfwlist2pac.cfg'
+def parseConfig(cfgFile):
     if not os.path.exists(cfgFile):
         config = defaultConfig
     else:
@@ -36,11 +44,11 @@ def parseConfig(defaultConfig):
         cf.read(cfgFile)
         try:
             config = {
-                'gfwUrl'         : cf.get('config', 'gfwUrl'),
-                'gfwProxy'       : cf.get('config', 'gfwProxy'),
-                'pacProxy'       : cf.get('config', 'pacProxy'),
-                'pacFilename'    : cf.get('config', 'pacFilename'),
-                'debug'          : cf.get('config', 'debug') in ['true', 'True']
+                'gfwUrl': cf.get('config', 'gfwUrl'),
+                'gfwProxy': cf.get('config', 'gfwProxy'),
+                'pacProxy': cf.get('config', 'pacProxy'),
+                'pacFilename': cf.get('config', 'pacFilename'),
+                'debug': cf.get('config', 'debug') in ['true', 'True']
             }
         except Exception, e:
             print e
@@ -50,14 +58,15 @@ def parseConfig(defaultConfig):
         p = re.compile('(PROXY|SOCKS|SOCKS5) (?:(.+):(.+)@)?(.+):(\d+)', re.IGNORECASE)
         m = p.match(config['gfwProxy'])
         if m is None:
-            print 'Config -> gfwProxy:%s is error format. format like this "PROXY|SOCKS|SOCKS5 [username:password@]hostname:port"' % config['gfwProxy']
+            print 'Config -> gfwProxy:%s is error format.'
+            print 'format like this "PROXY|SOCKS|SOCKS5 [username:password@]hostname:port"' % config['gfwProxy']
             sys.exit(1)
         config['gfwProxyType'] = {
-            'SOCKS'     : 1,
-            'SOCKS4'    : 1,
-            'SOCKS5'    : 2,
-            'PROXY'     : 3,
-            }[m.group(1).upper()]
+            'SOCKS': 1,
+            'SOCKS4': 1,
+            'SOCKS5': 2,
+            'PROXY': 3,
+        }[m.group(1).upper()]
         config['gfwProxyUsr'] = m.group(2)
         config['gfwProxyPwd'] = m.group(3)
         config['gfwProxyHost'] = m.group(4)
@@ -65,18 +74,28 @@ def parseConfig(defaultConfig):
 
     return config
 
+
 def printConfigInfo(config):
     print "配置信息: "
-    print 'GFWList Proxy: Type: %s, Host: %s, Port: %s , Usr: %s, Pwd: %s' % (config['gfwProxyType'],
-                                                                              config['gfwProxyHost'], config['gfwProxyPort'],
-                                                                              config['gfwProxyUsr'], config['gfwProxyPwd'])
+    if config['gfwProxyType']:
+        print 'GFWList Proxy: Type: %s, Host: %s, Port: %s , Usr: %s, Pwd: %s' % (config['gfwProxyType'],
+                                                                                  config['gfwProxyHost'],
+                                                                                  config['gfwProxyPort'],
+                                                                                  config['gfwProxyUsr'],
+                                                                                  config['gfwProxyPwd'])
+    else:
+        print 'GFWList Proxy: None'
     print "PAC Proxy String: %s" % config['pacProxy']
+
 
 def fetchGFWList(config):
     import socks, socket, urllib2
+
     gfwProxyType = config['gfwProxyType']
-    if (gfwProxyType == socks.PROXY_TYPE_SOCKS4) or (gfwProxyType == socks.PROXY_TYPE_SOCKS5) or (gfwProxyType == socks.PROXY_TYPE_HTTP):
-        socks.setdefaultproxy(gfwProxyType, config['gfwProxyHost'], config['gfwProxyPort'], True, config['gfwProxyUsr'], config['gfwProxyPwd'])
+    if (gfwProxyType == socks.PROXY_TYPE_SOCKS4) or (gfwProxyType == socks.PROXY_TYPE_SOCKS5) or (
+                gfwProxyType == socks.PROXY_TYPE_HTTP):
+        socks.setdefaultproxy(gfwProxyType, config['gfwProxyHost'], config['gfwProxyPort'], True, config['gfwProxyUsr'],
+                              config['gfwProxyPwd'])
         socket.socket = socks.socksocket
 
     if config['debug']:
@@ -91,12 +110,14 @@ def fetchGFWList(config):
 
     return gfwlistContent, gfwlistModified
 
+
 def wildcardToRegexp(pattern):
     pattern = re.sub(r"([\\\+\|\{\}\[\]\(\)\^\$\.\#])", r"\\\1", pattern);
     #pattern = re.sub(r"\*+", r"*", pattern)
     pattern = re.sub(r"\*", r".*", pattern)
     pattern = re.sub(r"\？", r".", pattern)
     return pattern;
+
 
 def parseRuleList(ruleList):
     directWildcardList = []
@@ -159,7 +180,7 @@ def parseRuleList(ruleList):
 
         if config['debug']:
             with open('debug_rule.txt', 'a') as f:
-                f.write("%s\n\t%s\n\n" % (origin_line, line) )
+                f.write("%s\n\t%s\n\n" % (origin_line, line))
 
     return directRegexpList, directWildcardList, proxyRegexpList, proxyWildcardList
 
@@ -171,6 +192,7 @@ def convertListToJSArray(lst):
         array = "\n    '" + array + "'\n    "
     return '[' + array + ']'
 
+
 def parseGFWListRules(gfwlistContent):
     gfwlist = base64.decodestring(gfwlistContent)
     if config['debug']:
@@ -179,6 +201,7 @@ def parseGFWListRules(gfwlistContent):
 
     return parseRuleList(gfwlist)
 
+
 def parseUserRules():
     directUserRegexpList = []
     directUserWildcardList = []
@@ -186,11 +209,13 @@ def parseUserRules():
     proxyUserWildcardList = []
     try:
         with open('gfwlist2pac.rules') as f:
-            directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList = parseRuleList(f.read())
+            directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList = parseRuleList(
+                f.read())
     except Exception, e:
         pass
 
     return directUserRegexpList, directUserWildcardList, proxyUserRegexpList, proxyUserWildcardList
+
 
 def generatePACRuls(userRules, gfwListRules):
     directRegexpList, directWildcardList, proxyRegexpList, proxyWildcardList = gfwListRules
@@ -278,11 +303,11 @@ function FindProxyForURL(url, host) {
     return D;
 }
 '''
-    result = { 'ver'        : VERSION,
-               'generated'  : time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime()),
-               'gfwmodified': gfwlistModified,
-               'proxy'      : config['pacProxy']    ,
-               'rules'      : generatePACRuls(userRules, gfwlistRules)
+    result = {'ver': VERSION,
+              'generated': time.strftime('%a, %d %b %Y %H:%M:%S GMT', time.gmtime()),
+              'gfwmodified': gfwlistModified,
+              'proxy': config['pacProxy'],
+              'rules': generatePACRuls(userRules, gfwlistRules)
     }
     pacContent = pacContent % result
     with open(config['pacFilename'], 'w') as handle:
@@ -294,11 +319,17 @@ if __name__ == "__main__":
     #更改工作目录为脚本所在目录
     os.chdir(sys.path[0])
 
-    print '''/** 
- * gfwlist2pac %s by Vangie Du http://codelife.me
- */''' % VERSION
+    parser = argparse.ArgumentParser(description='Generate pac against GFW list.')
+    parser.add_argument('config', default=default_config_file, nargs='?',
+                        help='config file, default %s' % default_config_file)
 
-    config = parseConfig(defaultConfig)
+    args = parser.parse_args()
+
+    config_file = args.config
+
+    print "/**\n * gfwlist2pac %s by Vangie Du http://codelife.me\n */" % VERSION
+
+    config = parseConfig(config_file)
 
     printConfigInfo(config)
 
