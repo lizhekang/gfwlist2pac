@@ -112,9 +112,9 @@ def fetchGFWList(config):
         urllib2.install_opener(opener)
 
     if config['debug']:
-        http_handler = urllib2.HTTPHandler(debuglevel=int(config['debug']))
-        https_handler = urllib2.HTTPSHandler(debuglevel=int(config['debug']))
-        opener = urllib2.build_opener(http_handler, https_handler)
+        httpHandler = urllib2.HTTPHandler(debuglevel=1)
+        httpsHandler = urllib2.HTTPSHandler(debuglevel=1)
+        opener = urllib2.build_opener(httpHandler, httpsHandler)
         urllib2.install_opener(opener)
 
     response = urllib2.urlopen(config['gfwUrl'])
