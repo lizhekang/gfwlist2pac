@@ -89,14 +89,27 @@ def printConfigInfo(config):
 
 
 def fetchGFWList(config):
-    import socks, socket, urllib2
+    import socks
+    import socket
+    import urllib2
 
-    gfwProxyType = config['gfwProxyType']
-    if (gfwProxyType == socks.PROXY_TYPE_SOCKS4) or (gfwProxyType == socks.PROXY_TYPE_SOCKS5) or (
-                gfwProxyType == socks.PROXY_TYPE_HTTP):
-        socks.setdefaultproxy(gfwProxyType, config['gfwProxyHost'], config['gfwProxyPort'], True, config['gfwProxyUsr'],
-                              config['gfwProxyPwd'])
+    proxy_type = config['gfwProxyType']
+    proxy_host = config['gfwProxyHost']
+    proxy_port = config['gfwProxyPort']
+    proxy_user = config['gfwProxyUsr']
+    proxy_pwd = config['gfwProxyPwd']
+
+    if proxy_type == socks.PROXY_TYPE_SOCKS4 or proxy_type == socks.PROXY_TYPE_SOCKS5:
+        socks.setdefaultproxy(proxy_type, proxy_host, proxy_port, True, proxy_user, proxy_pwd)
         socket.socket = socks.socksocket
+    elif proxy_type == socks.PROXY_TYPE_HTTP:
+        http_proxy = '{}:{}'.format(proxy_host, proxy_port)
+        if proxy_user or proxy_pwd:
+            http_proxy = '{}:{}@{}'.format(proxy_user, proxy_pwd, http_proxy)
+
+        proxy_handler = urllib2.ProxyHandler({'http': http_proxy})
+        opener = urllib2.build_opener(proxy_handler)
+        urllib2.install_opener(opener)
 
     if config['debug']:
         httpHandler = urllib2.HTTPHandler(debuglevel=1)
