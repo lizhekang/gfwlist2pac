@@ -1,0 +1,19 @@
+{
+  "name": "gfwlist2pac",
+  "version": "0.1.0",
+  "description": "Auto turn gfwlist to pac.",
+  "main": "main.js",
+  "scripts": {
+    "test": "node main.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lizhekang/gfwlist2pac.git"
+  },
+  "author": "dalexli",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lizhekang/gfwlist2pac/issues"
+  },
+  "homepage": "https://github.com/lizhekang/gfwlist2pac#readme"
+}
