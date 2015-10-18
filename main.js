@@ -20,7 +20,7 @@ function jobHandler() {
             {silent: true},
             function(code, output) {
                 logHelper.logH('Exitcode:', code);
-                logHelper.logH('\n' + loutput);
+                logHelper.logH('\n' + output);
         });
     }else {
         logHelper.logH('Error: not support python version %s', version);
