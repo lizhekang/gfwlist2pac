@@ -52,7 +52,7 @@ logs
 *.log
 npm-debug.log*
 
-# Runtime data
+# Runtime output
 pids
 *.pid
 *.seed
