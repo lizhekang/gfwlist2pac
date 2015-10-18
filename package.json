@@ -15,5 +15,10 @@
   "bugs": {
     "url": "https://github.com/lizhekang/gfwlist2pac/issues"
   },
-  "homepage": "https://github.com/lizhekang/gfwlist2pac#readme"
+  "homepage": "https://github.com/lizhekang/gfwlist2pac#readme",
+  "dependencies": {
+    "moment": "^2.10.6",
+    "node-schedule": "^0.2.9",
+    "shelljs": "^0.5.3"
+  }
 }
